@@ -30,13 +30,33 @@ let goalRemove = {
     id: 0
 };
 
+/**
+ * Characteristics of a pure funciton
+ *
+ * 1) Always return the same results
+ * 2) Depend only on values inside of scope.
+ * 3) Never product side effects.
+ */
+
+ // Reducer
+ // Takes the state and action and reduces them into a new single state
+ function todos (state = [], action) {
+     if (action.type === 'ADD_TODO') {
+         // It's looking for a particular value of the param provided
+         return state.concat([action.todo]);
+     }
+
+     return state;
+ }
+
+
 // So each action has a set of expected values associated with it
 // So any value that hasn't been prescriptively associated to that action
 // Will likely fail (will certainly fail?)
 // So you're basically making this as predictable as possible
 // It's higher overhead, but you're almost typing the transitions
 
-function createStore () {
+function createStore (reducer) {
     // Four parts
     // 1. The state
     // 2. Get the state
@@ -56,18 +76,51 @@ function createStore () {
 
         // Return a function which filters out the listener you pushed
         // From the ones there
+        // Key is that this only happens when invoked.
         return () => {
             listeners = listeners.filter((l) => l !== listener)
         }
     }
 
+    const dispatch = (action) => {
+        // call todos
+        // loop over listeners and invoke them.
+
+        state = reducer(state, action);
+
+        // Where the hell does the listener get hooked up?
+        listeners.forEach((listener) => listener());
+    }
+
     return {
         getState,
         subscribe,
+        dispatch
     }
 }
 
-const store = createStore();
-store.subscribe(() => {
+const store = createStore(todos);
 
+const unsubscribe = store.subscribe(() => {
+    console.log('The new state is: ', store.getState())
 });
+
+store.dispatch({
+    type: 'ADD_TODO',
+    todo: {
+        id: 0,
+        name: "Learn Redux",
+        complete: false,
+    },
+})
+// unsubscribe();
+store.dispatch({
+    type: 'ADD_TODO',
+    todo: {
+        id: 1,
+        name: "bing bong",
+        complete: false,
+    }
+})
+
+console.log(store);
