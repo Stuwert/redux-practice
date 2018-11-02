@@ -44,6 +44,12 @@ let goalRemove = {
      if (action.type === 'ADD_TODO') {
          // It's looking for a particular value of the param provided
          return state.concat([action.todo]);
+     } else if (action.type === 'REMOVE_TODO') {
+         return state.filter((todo) => todo.id !== action.id )
+     } else if (action.type === 'TOGGLE_TODO') {
+         return state.map((todo) => todo.id !== action.id ? todo :
+            Object.assign({}, todo, {complete : !todo.complete})
+         )
      }
 
      return state;
@@ -123,4 +129,21 @@ store.dispatch({
     }
 })
 
-console.log(store);
+store.dispatch({
+    type: 'ADD_TODO',
+    todo : {
+        id: 2,
+        name: "Learn to snowboard",
+        complete: false
+    }
+});
+
+store.dispatch({
+    type: 'REMOVE_TODO',
+    id: 2
+});
+
+store.dispatch({
+    type: 'TOGGLE_TODO',
+    id: 0
+});
