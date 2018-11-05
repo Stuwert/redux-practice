@@ -115,9 +115,15 @@ const app = (state = {}, action) => {
 
 const store = createStore(app);
 
+// Our subscribe function so we can keep things consistent
 const unsubscribe = store.subscribe(() => {
     console.log('The new state is: ', store.getState())
 });
+
+// So the reason we don't just have a store.addTodoAction is because of separation of concerns?
+// It makes more sense to allow the store to have a concrete contract for method updates
+// And then pass those updates through
+// Is it really necessary on the FE though?
 
 store.dispatch(addTodoAction({
     id: 0,
