@@ -1,3 +1,11 @@
+import createStore from './library';
+
+const ADD_TODO = 'ADD_TODO';
+const REMOVE_TODO = 'REMOVE_TODO';
+const TOGGLE_TODO = 'TOGGLE_TODO';
+const ADD_GOAL = 'ADD_GOAL';
+const REMOVE_GOAL = 'REMOVE_GOAL';
+
 let action = {
     type: 'ADD_TODO',
     todo: {
@@ -30,6 +38,35 @@ let goalRemove = {
     id: 0
 };
 
+const addTodoAction = (todo) => {
+    return {
+        type: ADD_TODO,
+        todo,
+    }
+};
+
+const removeTodoAction = (id) => {
+    return {
+        type: REMOVE_TODO,
+        id
+    }
+};
+
+const toggleTodoAction = (id) => ({
+    type: TOGGLE_TODO,
+    id
+});
+
+const addGoalAction = (goal) => ({
+    type: ADD_GOAL,
+    goal
+});
+
+const removeGoalAction = (id) => ({
+    type: REMOVE_GOAL,
+    id
+});
+
 /**
  * Characteristics of a pure funciton
  *
@@ -40,110 +77,66 @@ let goalRemove = {
 
  // Reducer
  // Takes the state and action and reduces them into a new single state
- function todos (state = [], action) {
-     if (action.type === 'ADD_TODO') {
-         // It's looking for a particular value of the param provided
-         return state.concat([action.todo]);
-     } else if (action.type === 'REMOVE_TODO') {
-         return state.filter((todo) => todo.id !== action.id )
-     } else if (action.type === 'TOGGLE_TODO') {
-         return state.map((todo) => todo.id !== action.id ? todo :
-            Object.assign({}, todo, {complete : !todo.complete})
-         )
-     }
-
-     return state;
+const todos = (state = [], action) => {
+     switch (action.type) {
+        case ADD_TODO:
+            return state.concat([action.todo]);
+        case REMOVE_TODO:
+            return state.filter((todo) => todo.id !== action.id)
+        case TOGGLE_TODO :
+            return state.map((todo) => todo.id !== action.id ? todo :
+                Object.assign({}, todo, { complete: !todo.complete })
+            )
+        default:
+            return state;
+    }
  }
 
+ const goals = (state = [], action) => {
+     switch(action.type) {
+        case ADD_GOAL:
+            return state.concat([action.goal]);
+        case REMOVE_GOAL:
+            return state.filter((goal) => goal.id === action.id);
+        default:
+            return state;
+     }
+ }
 
-// So each action has a set of expected values associated with it
-// So any value that hasn't been prescriptively associated to that action
-// Will likely fail (will certainly fail?)
-// So you're basically making this as predictable as possible
-// It's higher overhead, but you're almost typing the transitions
-
-function createStore (reducer) {
-    // Four parts
-    // 1. The state
-    // 2. Get the state
-    // 3. Listen to changes on the state
-    // 4. Update the state
-
-    let state;
-    let listeners = [];
-
-    const getState = () => state;
-
-    // I'm still not exactly sure what this listener is supposed to do
-
-    const subscribe = (listener) => {
-        // Push the listener onto the stack
-        listeners.push(listener);
-
-        // Return a function which filters out the listener you pushed
-        // From the ones there
-        // Key is that this only happens when invoked.
-        return () => {
-            listeners = listeners.filter((l) => l !== listener)
-        }
-    }
-
-    const dispatch = (action) => {
-        // call todos
-        // loop over listeners and invoke them.
-
-        state = reducer(state, action);
-
-        // Where the hell does the listener get hooked up?
-        listeners.forEach((listener) => listener());
-    }
-
-    return {
-        getState,
-        subscribe,
-        dispatch
-    }
+ // So the reducer will fire for each action.
+ // I.e. goals will get todos actions and vice-versa
+ // But the key won't match up.
+const app = (state = {}, action) => {
+     return {
+         goals: goals(state.goals, action),
+         todos: todos(state.todos, action)
+     }
 }
 
-const store = createStore(todos);
+const store = createStore(app);
 
 const unsubscribe = store.subscribe(() => {
     console.log('The new state is: ', store.getState())
 });
 
-store.dispatch({
-    type: 'ADD_TODO',
-    todo: {
-        id: 0,
-        name: "Learn Redux",
-        complete: false,
-    },
-})
+store.dispatch(addTodoAction({
+    id: 0,
+    name: "Learn Redux",
+    complete: false,
+}))
 // unsubscribe();
-store.dispatch({
-    type: 'ADD_TODO',
-    todo: {
-        id: 1,
-        name: "bing bong",
-        complete: false,
-    }
-})
+store.dispatch(addTodoAction({
+    id: 1,
+    name: "bing bong",
+    complete: false,
+}));
 
-store.dispatch({
-    type: 'ADD_TODO',
-    todo : {
-        id: 2,
-        name: "Learn to snowboard",
-        complete: false
-    }
-});
+store.dispatch(addTodoAction({
+    id: 2,
+    name: "Learn to snowboard",
+    complete: false
+}));
 
-store.dispatch({
-    type: 'REMOVE_TODO',
-    id: 2
-});
+store.dispatch(removeTodoAction(2));
 
-store.dispatch({
-    type: 'TOGGLE_TODO',
-    id: 0
-});
+store.dispatch(toggleTodoAction(0));
