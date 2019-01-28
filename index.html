@@ -7,6 +7,8 @@
     <script src='https://unpkg.com/react@16.3.0-alpha.1/umd/react.development.js'></script>
     <script src='https://unpkg.com/react-dom@16.3.0-alpha.1/umd/react-dom.development.js'></script>
     <script src='https://unpkg.com/babel-standalone@6.15.0/babel.min.js'></script>
+
+    <script src="https://tylermcginnis.com/goals-todos-api/index.js"></script>
 </head>
 
 <body>
@@ -31,6 +33,7 @@
         const ADD_GOAL = 'ADD_GOAL'
         const REMOVE_GOAL = 'REMOVE_GOAL'
         const TOGGLE_GOAL = 'TOGGLE_GOAL'
+        const RECEIVE_DATA = 'RECEIVE_DATA';
 
         function addTodoAction(todo) {
             return {
@@ -75,6 +78,30 @@
                 id,
             }
         }
+
+        function receiveDataAction(todos, goals) {
+            return {
+                type: RECEIVE_DATA,
+                todos,
+                goals,
+            }
+        }
+
+        // Slight increase in the function of action creators
+        // They're now also respsonsible for handling the changes
+        // that go on from a data perspective
+
+        function handleDeleteTodo(todo) {
+            return (dispatch) => {
+                dispatch(removeTodoAction(todo.id));
+                return API.deleteTodo(todo.id)
+                    .catch(() => {
+                        dispatch(addTodoAction(todo));
+                        alert('an error occurred.  Try again.')
+                    })
+            }
+        }
+
         // ES6 Way of handling
         const logger = (story) => (next) => (action) => {
             console.group(action.type);
@@ -108,6 +135,8 @@
             }
         }
 
+        // Can listen for same action type in multiple reducers
+
         // Reducer function
         function todos(state = [], action) {
             switch (action.type) {
@@ -119,6 +148,9 @@
                     return state.map((todo) => todo.id !== action.id ? todo :
                         Object.assign({}, todo, { complete: !todo.complete })
                     )
+                case RECEIVE_DATA:
+                    // Will override existing data.
+                    return action.todos;
                 default:
                     return state
             }
@@ -134,27 +166,40 @@
                     return state.map((goal) => goal.id !== action.id ? goal :
                         Object.assign({}, goal, { complete: !goal.complete })
                     )
+                case RECEIVE_DATA:
+                    // Will override existing data.
+                    return action.goals;
                 default:
                     return state
             }
         }
 
+        function loading(state = true, action) {
+            switch (action.type) {
+                case RECEIVE_DATA:
+                    return false;
+                default:
+                    return state;
+            }
+        }
+
+        // So thunk basically allows you to have more dynamic
+        // Functions that work as actions.
+
+        const thunk = (store) => (next) => (action) => {
+            if (typeof action === 'function') {
+                return action(store.dispatch);
+            }
+
+            return next(action);
+        }
+
         const store = Redux.createStore(Redux.combineReducers({
             todos,
             goals,
-        }), Redux.applyMiddleware(checker, logger));
+            loading,
+        }), Redux.applyMiddleware(checker, logger, thunk));
         // Middleware runs left to right.
-
-        store.subscribe(() => {
-            const { goals, todos } = store.getState();
-
-            document.getElementById('goals').innerHTML = '';
-            document.getElementById('todos').innerHTML = '';
-
-
-            goals.forEach(addGoalToDOM);
-            todos.forEach(addTodoToDOM);
-        })
     </script>
 
     <script type="text/babel">
@@ -164,8 +209,8 @@
             return (
                 <ul>
                     {props.items.map((item) => (
-                        <li key={item.id} onClick={() => toggle && toggle(item)} >
-                            <span className={ item.complete ? 'struckThrough' : '' }>{item.name}</span>
+                        <li key={item.id} >
+                            <span className={ item.complete ? 'struckThrough' : '' } onClick={() => toggle && toggle(item)} >{item.name}</span>
                             <button onClick={() => remove(item)}>X</button>
                         </li>
                     ))}
@@ -175,23 +220,26 @@
 
         class Todos extends React.Component {
             removeItem = (todo) => {
-                this.props.store.dispatch(removeTodoAction(todo.id));
+                this.props.store.dispatch(handleDeleteTodo(todo));
             }
             addItem = (e) => {
                 e.preventDefault();
-                const name = this.input.value;
-                this.input.value = ''
 
-                this.props.store.dispatch(addTodoAction({
-                    id: generateId(),
-                    name,
-                    complete: false,
-                }));
-
+                return API.saveTodo(this.input.value)
+                .then((todo) => {
+                    this.props.store.dispatch(addTodoAction(todo));
+                    this.input.value = '';
+                })
+                .catch(() => alert('There was an error.  Try again.'))
             }
 
             toggleItem = (todo) => {
                 this.props.store.dispatch(toggleTodoAction(todo.id));
+                return API.saveTodoToggle(todo.id)
+                    .catch(() => {
+                        this.props.store.dispatch(toggleTodoAction(todo.id));
+                        alert('An error occurred. Try again.')
+                    })
             }
 
             render() {
@@ -220,19 +268,22 @@
         class Goals extends React.Component {
             removeItem = (goal) => {
                 this.props.store.dispatch(removeGoalAction(goal.id));
+                return API.deleteGoal(goal.id)
+                    .catch(() => {
+                        this.props.store.dispatch(addGoalAction(goal));
+                        alert('an error occurred.  Try again.')
+                    })
             }
 
             addItem = (e) => {
                 e.preventDefault();
-                const name = this.input.value;
-                this.input.value = '';
 
-                this.props.store.dispatch(addGoalAction({
-                    id: generateId(),
-                    name,
-                    completed: false,
-                }))
-
+                return API.saveGoal(this.input.value)
+                .then((goal) => {
+                    this.props.store.dispatch(addGoalAction(goal));
+                    this.input.value = '';
+                })
+                .catch(() => alert('There was an error.  Try again.'))
             }
             render() {
                 return (
@@ -264,12 +315,26 @@
             // }
             componentDidMount () {
                 const { store } = this.props;
-
                 store.subscribe(() => this.forceUpdate());
+
+
+                Promise.all([
+                    API.fetchTodos(),
+                    API.fetchGoals(),
+                ]).then(([todos, goals]) => {
+                    store.dispatch(receiveDataAction(
+                        todos,
+                        goals
+                    ));
+                });
             }
             render() {
                 const { store } = this.props;
-                const { todos, goals } = store.getState();
+                const { todos, goals, loading } = store.getState();
+
+                if (loading === true) {
+                    return <h3>Loading</h3>
+                }
 
                 return (
                     <div>
