@@ -9,6 +9,7 @@
     <script src='https://unpkg.com/babel-standalone@6.15.0/babel.min.js'></script>
 
     <script src="https://tylermcginnis.com/goals-todos-api/index.js"></script>
+    <script src="https://unpkg.com/redux-thunk@2.2.0/dist/redux-thunk.min.js"></script>
 </head>
 
 <body>
@@ -91,6 +92,10 @@
         // They're now also respsonsible for handling the changes
         // that go on from a data perspective
 
+        // So we really want to do this if
+        // extra data manipulation needs to be handled
+        // as a side effect of the action
+
         function handleDeleteTodo(todo) {
             return (dispatch) => {
                 dispatch(removeTodoAction(todo.id));
@@ -99,6 +104,64 @@
                         dispatch(addTodoAction(todo));
                         alert('an error occurred.  Try again.')
                     })
+            }
+        }
+
+        function handleAddTodo(name, callback) {
+            return (dispatch) => {
+                return API.saveTodo(name)
+                    .then((todo) => {
+                        dispatch(addTodoAction(todo));
+                        callback();
+                    })
+                    .catch(() => alert('There was an error.  Try again.'))
+            }
+        }
+
+        function handleToggleTodo(id) {
+            return (dispatch) => {
+                dispatch(toggleTodoAction(id));
+                return API.toggleTodo(id)
+                    .catch(() => {
+                        dispatch(toggleTodoAction(id));
+                        alert('There was an error. Try again');
+                    });
+            }
+        }
+
+        function handleAddGoal(name, callback) {
+            return (dispatch) => {
+                return API.saveGoal(name)
+                    .then((goal) => {
+                        dispatch(addGoalAction(goal));
+                        callback();
+                    })
+                    .catch(() => alert('There was an error.  Try again.'))
+            }
+        }
+
+        function handleDeleteGoal(goal) {
+            return (dispatch) => {
+                dispatch(removeGoalAction(goal.id));
+                return API.deleteGoal(goal.id)
+                    .catch(() => {
+                        dispatch(addGoalAction(goal));
+                        alert('an error occured');
+                    })
+            }
+        }
+
+        function handleInitialData() {
+            return (dispatch) => {
+                Promise.all([
+                    API.fetchTodos(),
+                    API.fetchGoals(),
+                ]).then(([todos, goals]) => {
+                    dispatch(receiveDataAction(
+                        todos,
+                        goals
+                    ));
+                });
             }
         }
 
@@ -185,20 +248,13 @@
 
         // So thunk basically allows you to have more dynamic
         // Functions that work as actions.
-
-        const thunk = (store) => (next) => (action) => {
-            if (typeof action === 'function') {
-                return action(store.dispatch);
-            }
-
-            return next(action);
-        }
+        // So the big shift is moving dispatch into the action creator
 
         const store = Redux.createStore(Redux.combineReducers({
             todos,
             goals,
             loading,
-        }), Redux.applyMiddleware(checker, logger, thunk));
+        }), Redux.applyMiddleware(ReduxThunk.default, checker, logger));
         // Middleware runs left to right.
     </script>
 
@@ -220,26 +276,18 @@
 
         class Todos extends React.Component {
             removeItem = (todo) => {
-                this.props.store.dispatch(handleDeleteTodo(todo));
+                this.props.dispatch(handleDeleteTodo(todo));
             }
             addItem = (e) => {
                 e.preventDefault();
-
-                return API.saveTodo(this.input.value)
-                .then((todo) => {
-                    this.props.store.dispatch(addTodoAction(todo));
-                    this.input.value = '';
-                })
-                .catch(() => alert('There was an error.  Try again.'))
+                this.props.dispatch(handleAddTodo(
+                    this.input.value,
+                    () => { this.input.value = '' }
+                ));
             }
 
             toggleItem = (todo) => {
-                this.props.store.dispatch(toggleTodoAction(todo.id));
-                return API.saveTodoToggle(todo.id)
-                    .catch(() => {
-                        this.props.store.dispatch(toggleTodoAction(todo.id));
-                        alert('An error occurred. Try again.')
-                    })
+                this.props.dispatch(handleToggleTodo(todo.id));
             }
 
             render() {
@@ -267,23 +315,16 @@
 
         class Goals extends React.Component {
             removeItem = (goal) => {
-                this.props.store.dispatch(removeGoalAction(goal.id));
-                return API.deleteGoal(goal.id)
-                    .catch(() => {
-                        this.props.store.dispatch(addGoalAction(goal));
-                        alert('an error occurred.  Try again.')
-                    })
+                this.props.dispatch(handleDeleteGoal(goal));
             }
 
             addItem = (e) => {
                 e.preventDefault();
 
-                return API.saveGoal(this.input.value)
-                .then((goal) => {
-                    this.props.store.dispatch(addGoalAction(goal));
-                    this.input.value = '';
-                })
-                .catch(() => alert('There was an error.  Try again.'))
+                this.props.dispatch(handleAddGoal(
+                    this.input.value,
+                    () => this.input.value = '',
+                ))
             }
             render() {
                 return (
@@ -315,22 +356,16 @@
             // }
             componentDidMount () {
                 const { store } = this.props;
+
+                // This subscription method is really inefficient
+                // It's re-rendering the entire state based on
+                // when any element of the store is updated.
                 store.subscribe(() => this.forceUpdate());
 
-
-                Promise.all([
-                    API.fetchTodos(),
-                    API.fetchGoals(),
-                ]).then(([todos, goals]) => {
-                    store.dispatch(receiveDataAction(
-                        todos,
-                        goals
-                    ));
-                });
+                store.dispatch(handleInitialData());
             }
             render() {
-                const { store } = this.props;
-                const { todos, goals, loading } = store.getState();
+                const { loading } = store.getState();
 
                 if (loading === true) {
                     return <h3>Loading</h3>
@@ -339,22 +374,72 @@
                 return (
                     <div>
                         React APP
-                        <Todos
-                            store={store}
-                            todos={todos}
-
-                        />
-                        <Goals
-                            store={store}
-                            goals={goals}
-                        />
+                        <ConnectedTodos />
+                        <ConnectedGoals />
                     </div>
                 )
             }
         }
 
+        class ConnectedTodos extends React.Component {
+            render() {
+                return (
+                    <Context.Consumer>
+                        {(state) => {
+                            const { todos } = store.getState();
+
+                            return <Todos todos={todos} dispatch={store.dispatch} />
+                        }}
+                    </Context.Consumer>
+                )
+            }
+        }
+
+        class ConnectedGoals extends React.Component {
+            render() {
+                return (
+                    <Context.Consumer>
+                        {(state) => {
+                            const { goals } = store.getState();
+
+                            return <Goals goals={goals} dispatch={store.dispatch} />
+                        }}
+                    </Context.Consumer>
+                )
+            }
+        }
+
+        class ConnectedApp extends React.Component {
+            render () {
+                return (
+                    <Context.Consumer>
+                        {(store) => (
+                            <App store={store} />
+                        )}
+                    </Context.Consumer>
+                )
+            }
+        }
+
+        const Context = React.createContext();
+        // Has two properties
+        // Provider <- data available to grab
+        // Consumer <- element that grabs data
+
+        class Provider extends React.Component {
+            render() {
+                return (
+                    <Context.Provider value={this.props.store}>
+                        {this.props.children}
+                    </Context.Provider>
+                )
+            }
+        }
+
         ReactDOM.render(
-            <App store={store}/>,
+            <Provider store={store}>
+                <ConnectedApp />
+            </Provider>,
             document.getElementById('app')
         );
 
