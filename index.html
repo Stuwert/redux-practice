@@ -238,8 +238,17 @@
             }
         }
 
+        mockState = {}
+        expectedState = {}
+        action = "123"
+
+        resultSTate = goals(mockState, action)
+
+        expect.to.equal(resultState, expectredState)
+
         function loading(state = true, action) {
-            switch (action.type) {
+            const suffix = action.type.split('/');
+            switch (suffix) {
                 case RECEIVE_DATA:
                     return false;
                 default:
